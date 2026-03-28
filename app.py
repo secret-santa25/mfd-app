@@ -125,3 +125,6 @@ elif st.session_state.page == "results":
         st.session_state.goals = []
         st.session_state.page = "start"
         st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.page_link("https://wealthrise.guru", label="🏠 Back to WealthRise Home")
