@@ -88,7 +88,6 @@ if st.button(T["btn"]):
             st.success(response.text)
             
             # --- GRAPHING ---
-            # SIP Calculation for Chart: M = P × [({1 + i}^n - 1) / i] × (1 + i)
             i = 0.12 / 12
             n = years * 12
             sip_val = target_amt / ((( (1+i)**n ) - 1) / i * (1+i))
@@ -103,7 +102,7 @@ if st.button(T["btn"]):
                           title="Wealth Growth Projection" if lang=="English" else "संपत्ती वाढीचा अंदाज")
             st.plotly_chart(fig, use_container_width=True)
             
-            st.caption(T["disclaimer"])
-            
         except Exception as e:
-            st.error(f"Something went wrong. Please check your API key settings.")
+            # THIS PART WILL NOW SHOW THE ACTUAL ERROR
+            st.error(f"Error Details: {str(e)}")
+            st.info("Common fix: Try changing 'gemini-1.5-pro' to 'gemini-1.5-flash' in the code.")
