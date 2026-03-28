@@ -1,92 +1,70 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 import pandas as pd
 import plotly.express as px
 
-# --- SAFE API CONFIGURATION ---
+# --- 1. SECURE CONNECTION ---
 if "API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["API_KEY"])
+    # 2026 SDK Syntax
+    client = genai.Client(api_key=st.secrets["API_KEY"])
 else:
-    st.error("❌ API Key not found in Streamlit Secrets!")
+    st.error("❌ API Key missing in Secrets!")
     st.stop()
 
-# UPDATED FOR 2026: Using Gemini 2.0 Flash (replaces retired 1.5 models)
-try:
-    model = genai.GenerativeModel('gemini-2.0-flash')
-except:
-    # Fallback to 2.5 if 2.0 is in high demand
-    model = genai.GenerativeModel('gemini-2.5-flash')
-
-# --- PAGE CONFIG ---
+# --- 2. APP UI ---
 st.set_page_config(page_title="MFD Goal Planner", layout="centered")
 
-st.markdown("""
-    <style>
-    .main { background-color: #f8f9fa; }
-    .stButton>button { width: 100%; border-radius: 8px; height: 3.5em; background-color: #1a73e8; color: white; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- LANGUAGE & LABELS ---
-lang = st.sidebar.selectbox("Choose Language / भाषा निवडा", ["English", "Marathi"])
+# Language Choice
+lang = st.sidebar.selectbox("Select Language / भाषा निवडा", ["English", "Marathi"])
 
 texts = {
-    "English": {
-        "title": "🎯 Financial Goal Planner",
-        "intro": "Plan your future with AI-powered insights.",
-        "goal_label": "Enter your Goal (e.g. Child Education, Retirement)",
-        "amt_label": "Target Amount (₹)",
-        "year_label": "Time Horizon (Years)",
-        "btn": "Calculate My Plan",
-        "disclaimer": "Mutual Fund investments are subject to market risks."
-    },
-    "Marathi": {
-        "title": "🎯 आर्थिक ध्येय नियोजक",
-        "intro": "तुमच्या स्वप्नांचे AI सह नियोजन करा.",
-        "goal_label": "तुमचे ध्येय लिहा (उदा. मुलांचे शिक्षण, निवृत्ती)",
-        "amt_label": "लक्ष्य रक्कम (₹)",
-        "year_label": "किती वर्षात पूर्ण करायचे आहे?",
-        "btn": "नियोजन तयार करा",
-        "disclaimer": "म्युच्युअल फंड गुंतवणूक बाजार जोखमीच्या अधीन असते."
-    }
+    "English": {"title": "🎯 Client Goal Planner", "add": "Add Goal", "calc": "Generate Full Plan", "goal_name": "Goal Name", "target": "Target (₹)", "yrs": "Years"},
+    "Marathi": {"title": "🎯 ग्राहक ध्येय नियोजक", "add": "ध्येय जोडा", "calc": "नियोजन तयार करा", "goal_name": "ध्येयाचे नाव", "target": "लक्ष्य रक्कम (₹)", "yrs": "वर्षे"}
 }
+L = texts[lang]
 
-T = texts[lang]
-st.title(T["title"])
-st.write(T["intro"])
+st.title(L["title"])
 
-# --- INPUTS ---
-goal_name = st.text_input(T["goal_label"], value="Child Education")
-col1, col2 = st.columns(2)
-with col1:
-    target_amt = st.number_input(T["amt_label"], min_value=10000, value=1000000, step=50000)
-with col2:
-    years = st.number_input(T["year_label"], min_value=1, max_value=40, value=10)
+# Session state to store multiple goals
+if "goals" not in st.session_state:
+    st.session_state.goals = []
 
-if st.button(T["btn"]):
-    with st.spinner("Generating Plan..." if lang=="English" else "नियोजन तयार होत आहे..."):
-        prompt = f"Role: Expert Financial Advisor. Language: {lang}. Goal: {goal_name}. Target: ₹{target_amt} in {years} years. Calculate monthly SIP at 12% return and explain simply."
+# Input Form
+with st.form("goal_form"):
+    g_name = st.text_input(L["goal_name"], placeholder="e.g. Retirement")
+    g_amt = st.number_input(L["target"], min_value=10000, value=1000000)
+    g_yrs = st.number_input(L["yrs"], min_value=1, value=10)
+    if st.form_submit_button(L["add"]):
+        st.session_state.goals.append({"name": g_name, "amt": g_amt, "yrs": g_yrs})
+
+# Display Added Goals
+if st.session_state.goals:
+    for i, g in enumerate(st.session_state.goals):
+        st.write(f"✅ {g['name']}: ₹{g['amt']:,} in {g['yrs']} years")
+    
+    if st.button(L["calc"]):
+        all_goals_text = "\n".join([f"- {g['name']}: ₹{g['amt']} in {g['yrs']} years" for g in st.session_state.goals])
+        
+        prompt = f"""
+        Role: Professional Mutual Fund Distributor. Language: {lang}.
+        Client has these goals:
+        {all_goals_text}
+        
+        1. Calculate monthly SIP for each goal (12% return).
+        2. Explain where to invest (categories like Flexi Cap, Hybrid) and why.
+        3. Give a very easy and motivating explanation.
+        """
         
         try:
-            response = model.generate_content(prompt)
-            st.success("✅ Plan Generated Successfully!")
-            st.markdown(response.text)
+            # Using Gemini 2.5 Flash - Stable 2026 Model
+            response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+            st.markdown("### Your Personalized Plan")
+            st.info(response.text)
             
-            # --- GRAPH ---
-            r = 0.12 / 12
-            n = years * 12
-            sip = target_amt / ((( (1+r)**n ) - 1) / r * (1+r))
-            
-            data = []
-            for y in range(years + 1):
-                val = (sip * 12) * (( (1.12)**(y+1) - 1) / 0.12)
-                data.append({"Year": 2026 + y, "Wealth (₹)": round(val)})
-            
-            df = pd.DataFrame(data)
-            fig = px.bar(df, x="Year", y="Wealth (₹)", title="Wealth Projection")
-            st.plotly_chart(fig, use_container_width=True)
-            st.caption(T["disclaimer"])
+            # --- SIMPLE SUMMARY GRAPH ---
+            chart_df = pd.DataFrame(st.session_state.goals)
+            fig = px.pie(chart_df, values='amt', names='name', title="Goal Distribution")
+            st.plotly_chart(fig)
             
         except Exception as e:
-            st.error(f"Technical Error: {str(e)}")
-            st.info("Check if your API Key has 'Gemini 2.0' enabled in AI Studio.")
+            st.error(f"Error: {e}")
